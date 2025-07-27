@@ -35,6 +35,70 @@ install_docker() {
     fi
 }
 
+# Function to install Docker Compose if not present
+install_docker_compose() {
+    echo -e "${BLUE}Checking Docker Compose...${NC}"
+    
+    # Check if docker compose (plugin) is available
+    if docker compose version &> /dev/null; then
+        echo -e "${GREEN}Docker Compose (plugin) is already installed${NC}"
+        docker compose version
+        return 0
+    fi
+    
+    # Check if docker-compose (standalone) is available
+    if command -v docker-compose &> /dev/null; then
+        echo -e "${GREEN}Docker Compose (standalone) is already installed${NC}"
+        docker-compose --version
+        return 0
+    fi
+    
+    echo -e "${YELLOW}Docker Compose not found. Installing Docker Compose plugin...${NC}"
+    
+    # Install Docker Compose plugin (recommended method)
+    if command -v apt &> /dev/null; then
+        sudo apt update
+        sudo apt install -y docker-compose-plugin
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y docker-compose-plugin
+    elif command -v dnf &> /dev/null; then
+        sudo dnf install -y docker-compose-plugin
+    else
+        echo -e "${YELLOW}Package manager not supported. Installing via direct download...${NC}"
+        # Fallback: install standalone docker-compose
+        DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+        sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+    fi
+    
+    # Wait a moment for plugin to load
+    sleep 2
+    
+    # Verify installation
+    if docker compose version &> /dev/null; then
+        echo -e "${GREEN}Docker Compose (plugin) installed successfully!${NC}"
+        docker compose version
+    elif command -v docker-compose &> /dev/null; then
+        echo -e "${GREEN}Docker Compose (standalone) installed successfully!${NC}"
+        docker-compose --version
+    else
+        echo -e "${YELLOW}Docker Compose plugin installed but may require Docker restart${NC}"
+        echo -e "${YELLOW}Try: sudo systemctl restart docker${NC}"
+        echo -e "${YELLOW}Or logout and login again${NC}"
+    fi
+}
+
+# Function to detect Docker Compose command
+detect_docker_compose_cmd() {
+    if docker compose version &> /dev/null; then
+        echo "docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        echo "docker-compose"
+    else
+        echo "docker compose"  # Default fallback
+    fi
+}
+
 # Function to install required tools
 install_required_tools() {
     echo -e "${BLUE}Checking required tools...${NC}"
