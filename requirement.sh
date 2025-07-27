@@ -73,22 +73,47 @@ install_make() {
     echo "✅ Make installed successfully!"
 }
 
+# Fungsi untuk mendeteksi versi Docker Compose
+detect_docker_compose() {
+    if command_exists "docker compose"; then
+        echo "docker compose"
+    elif command_exists "docker-compose"; then
+        echo "docker-compose"
+    else
+        echo "none"
+    fi
+}
+
 # Fungsi untuk membuat Makefile
 create_makefile() {
     echo "📄 Creating Makefile..."
     
-    cat > Makefile << 'EOF'
+    # Deteksi versi Docker Compose yang tersedia
+    COMPOSE_CMD=$(detect_docker_compose)
+    
+    if [ "$COMPOSE_CMD" = "none" ]; then
+        echo "❌ No Docker Compose found. Please install Docker Compose first."
+        return 1
+    fi
+    
+    echo "🔍 Detected Docker Compose command: $COMPOSE_CMD"
+    
+    cat > Makefile << EOF
 # Makefile untuk Docker Compose commands
 # Usage: make <command>
+# Auto-detected Docker Compose command: $COMPOSE_CMD
 
 .PHONY: help up down logs ps restart prune-all clean
+
+# Docker Compose command (auto-detected)
+COMPOSE_CMD = $COMPOSE_CMD
 
 # Default target
 help: ## Tampilkan help message
 	@echo "Available commands:"
-	@echo "  make up          - Start containers (docker-compose up -d)"
-	@echo "  make down        - Stop containers (docker-compose down)"
-	@echo "  make logs        - Show logs (docker-compose logs -f)"
+	@echo "  make up          - Start containers (\$(COMPOSE_CMD) up -d)"
+	@echo "  make down        - Stop containers (\$(COMPOSE_CMD) down)"
+	@echo "  make logs        - Show logs (\$(COMPOSE_CMD) logs -f)"
 	@echo "  make ps          - Show running containers"
 	@echo "  make restart     - Restart containers"
 	@echo "  make prune-all   - Stop containers and remove images"
@@ -96,35 +121,35 @@ help: ## Tampilkan help message
 
 up: ## Start containers in detached mode
 	@echo "🚀 Starting containers..."
-	docker-compose up -d
+	\$(COMPOSE_CMD) up -d
 	@echo "✅ Containers started!"
 
 down: ## Stop and remove containers
 	@echo "🛑 Stopping containers..."
-	docker-compose down
+	\$(COMPOSE_CMD) down
 	@echo "✅ Containers stopped!"
 
 logs: ## Show logs from all containers
 	@echo "📋 Showing logs..."
-	docker-compose logs -f
+	\$(COMPOSE_CMD) logs -f
 
 ps: ## Show running containers
 	@echo "📊 Running containers:"
-	docker-compose ps
+	\$(COMPOSE_CMD) ps
 
 restart: ## Restart containers
 	@echo "🔄 Restarting containers..."
-	docker-compose restart
+	\$(COMPOSE_CMD) restart
 	@echo "✅ Containers restarted!"
 
 prune-all: ## Stop containers and remove all images
 	@echo "🧹 Stopping containers and removing images..."
-	docker-compose down --rmi all
+	\$(COMPOSE_CMD) down --rmi all
 	@echo "✅ Cleanup completed!"
 
 clean: ## Clean up everything (containers, images, volumes, networks)
 	@echo "🗑️  Cleaning up everything..."
-	docker-compose down -v --rmi all --remove-orphans
+	\$(COMPOSE_CMD) down -v --rmi all --remove-orphans
 	docker system prune -f
 	@echo "✅ Complete cleanup done!"
 
@@ -134,6 +159,7 @@ stop: down
 EOF
 
     echo "✅ Makefile created successfully!"
+    echo "🔍 Using Docker Compose command: $COMPOSE_CMD"
     echo
     echo "Available make commands:"
     echo "  make up          - Start containers"
@@ -162,14 +188,15 @@ main() {
     fi
     
     # Cek dan install Docker Compose jika belum ada
-    if ! command_exists "docker compose" && ! command_exists "docker-compose"; then
+    COMPOSE_CMD_CHECK=$(detect_docker_compose)
+    if [ "$COMPOSE_CMD_CHECK" = "none" ]; then
         echo "❌ Docker Compose not found"
         install_docker_compose
     else
-        echo "✅ Docker Compose already installed"
+        echo "✅ Docker Compose already installed ($COMPOSE_CMD_CHECK)"
         if command_exists "docker compose"; then
             docker compose version
-        else
+        elif command_exists "docker-compose"; then
             docker-compose --version
         fi
     fi
@@ -201,6 +228,7 @@ main() {
     echo "3. Run 'make up' to start your containers"
     echo
     echo "💡 Run 'make help' to see all available commands"
+    echo "🔍 Makefile will automatically use the detected Docker Compose command: $(detect_docker_compose)"
 }
 
 # Jalankan main function
