@@ -56,13 +56,23 @@ install_docker_compose() {
     # Install Docker Compose plugin (recommended method)
     sudo apt-get install -y docker-compose-plugin
     
-    # Verifikasi instalasi
-    if command_exists "docker compose"; then
+    # Tunggu sebentar untuk memastikan plugin ter-load
+    sleep 2
+    
+    # Verifikasi instalasi dengan berbagai cara
+    if docker compose version >/dev/null 2>&1; then
         echo "✅ Docker Compose installed successfully!"
         docker compose version
+    elif docker-compose --version >/dev/null 2>&1; then
+        echo "✅ Docker Compose (standalone) installed successfully!"
+        docker-compose --version
     else
-        echo "❌ Docker Compose installation failed"
-        exit 1
+        echo "⚠️  Docker Compose plugin installed but may require Docker restart"
+        echo "📋 Installed package info:"
+        dpkg -l | grep docker-compose-plugin || echo "Package not found in dpkg"
+        echo "🔄 Try restarting Docker service: sudo systemctl restart docker"
+        echo "🔄 Or logout and login again to refresh your session"
+        return 0  # Don't exit, continue with setup
     fi
 }
 
@@ -73,9 +83,41 @@ install_make() {
     echo "✅ Make installed successfully!"
 }
 
-# Fungsi untuk mendeteksi versi Docker Compose
+# Fungsi untuk debugging Docker Compose
+debug_docker_compose() {
+    echo "🔍 Docker Compose Debug Information:"
+    echo "----------------------------------------"
+    echo "1. Checking docker compose plugin:"
+    docker compose version 2>/dev/null || echo "   ❌ docker compose not available"
+    
+    echo "2. Checking docker-compose standalone:"
+    docker-compose --version 2>/dev/null || echo "   ❌ docker-compose not available"
+    
+    echo "3. Checking installed Docker plugins:"
+    docker plugin ls 2>/dev/null || echo "   ❌ Cannot list Docker plugins"
+    
+    echo "4. Checking Docker Compose plugin package:"
+    dpkg -l | grep docker-compose 2>/dev/null || echo "   ❌ No docker-compose packages found"
+    
+    echo "5. Docker version:"
+    docker version --format '{{.Server.Version}}' 2>/dev/null || echo "   ❌ Cannot get Docker version"
+    
+    echo "6. PATH check:"
+    echo "   PATH: $PATH"
+    
+    echo "7. Which docker:"
+    which docker 2>/dev/null || echo "   ❌ docker not found in PATH"
+    echo "----------------------------------------"
+}
 detect_docker_compose() {
-    if command_exists "docker compose"; then
+    # Cek docker compose (plugin version) terlebih dahulu
+    if docker compose version >/dev/null 2>&1; then
+        echo "docker compose"
+    # Cek docker-compose (standalone version)
+    elif docker-compose --version >/dev/null 2>&1; then
+        echo "docker-compose"
+    # Fallback: cek dengan command_exists
+    elif command_exists "docker compose"; then
         echo "docker compose"
     elif command_exists "docker-compose"; then
         echo "docker-compose"
@@ -92,8 +134,12 @@ create_makefile() {
     COMPOSE_CMD=$(detect_docker_compose)
     
     if [ "$COMPOSE_CMD" = "none" ]; then
-        echo "❌ No Docker Compose found. Please install Docker Compose first."
-        return 1
+        echo "⚠️  No Docker Compose detected, but creating Makefile with docker compose as default"
+        echo "💡 You can manually edit the Makefile later if needed"
+        COMPOSE_CMD="docker compose"
+        
+        # Tampilkan debug info
+        debug_docker_compose
     fi
     
     echo "🔍 Detected Docker Compose command: $COMPOSE_CMD"
@@ -188,15 +234,22 @@ main() {
     fi
     
     # Cek dan install Docker Compose jika belum ada
+    echo "🔍 Checking Docker Compose availability..."
     COMPOSE_CMD_CHECK=$(detect_docker_compose)
     if [ "$COMPOSE_CMD_CHECK" = "none" ]; then
         echo "❌ Docker Compose not found"
         install_docker_compose
+        # Re-check setelah instalasi
+        COMPOSE_CMD_CHECK=$(detect_docker_compose)
+        if [ "$COMPOSE_CMD_CHECK" = "none" ]; then
+            echo "⚠️  Docker Compose may need manual verification"
+            echo "💡 Try running: docker compose version"
+        fi
     else
         echo "✅ Docker Compose already installed ($COMPOSE_CMD_CHECK)"
-        if command_exists "docker compose"; then
+        if [ "$COMPOSE_CMD_CHECK" = "docker compose" ]; then
             docker compose version
-        elif command_exists "docker-compose"; then
+        elif [ "$COMPOSE_CMD_CHECK" = "docker-compose" ]; then
             docker-compose --version
         fi
     fi
